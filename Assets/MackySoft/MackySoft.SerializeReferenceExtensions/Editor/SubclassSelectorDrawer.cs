@@ -5,6 +5,8 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEditor;
 using UnityEditor.IMGUI.Controls;
+using UnityEditor.UIElements;
+using UnityEngine.UIElements;
 
 namespace MackySoft.SerializeReferenceExtensions.Editor
 {
@@ -31,6 +33,80 @@ namespace MackySoft.SerializeReferenceExtensions.Editor
 
 		SerializedProperty m_TargetProperty;
 
+		public override VisualElement CreatePropertyGUI(SerializedProperty property)
+		{
+			VisualElement root = new();
+
+			if (property.propertyType == SerializedPropertyType.ManagedReference)
+			{
+				// Draw the foldout.
+				if (string.IsNullOrEmpty(property.managedReferenceFullTypename))
+				{
+					Button dropdownButton = null;
+					dropdownButton = new Button(() =>
+					{
+						TypePopupCache popup = this.GetTypePopup(property);
+						this.m_TargetProperty = property;
+						popup.TypePopup.Show(dropdownButton.LocalToWorld(dropdownButton.contentRect));
+					});
+
+					dropdownButton.text = this.GetTypeName(property).text;
+					root.Add(dropdownButton);
+					
+					return root;
+				}
+				
+				Foldout fo = new Foldout();
+				fo.text = property.displayName;
+				var ucm = fo.Q<VisualElement>("unity-checkmark");
+				Button fDropdownButton = null;
+				fDropdownButton = new Button(() =>
+					{
+						TypePopupCache popup = this.GetTypePopup(property);
+						this.m_TargetProperty = property;
+						popup.TypePopup.Show(fDropdownButton.LocalToWorld(fDropdownButton.contentRect));
+					});
+				fDropdownButton.text = property.managedReferenceFullTypename;
+				fDropdownButton.style.flexGrow = 1;
+				ucm.parent.Add(fDropdownButton);
+				fo.BindProperty(property);
+				root.Add(fo);
+
+				// Check if a custom property drawer exists for this type.
+				PropertyDrawer customDrawer = GetCustomPropertyDrawer(property);
+				if (customDrawer != null)
+				{
+					// Draw the property with custom property drawer.
+					/*Rect indentedRect = position;
+					float foldoutDifference = EditorGUIUtility.singleLineHeight + EditorGUIUtility.standardVerticalSpacing;
+					indentedRect.height = customDrawer.GetPropertyHeight(property, label);
+					indentedRect.y += foldoutDifference;
+					customDrawer.OnGUI(indentedRect, property, label);*/
+					var ve = customDrawer.CreatePropertyGUI(property);
+					fo.Add(ve);
+				}
+				else
+				{
+					// Draw the properties of the child elements.
+					// NOTE: In the following code, since the foldout layout isn't working properly, I'll iterate through the properties of the child elements myself.
+
+					foreach (var childProp in property.GetChildProperties())
+					{
+						PropertyField propField = new(childProp);
+						fo.Add(propField);
+					}
+				}
+			}
+			else
+			{
+				
+				Label text = new(SubclassSelectorDrawer.k_IsNotManagedReferenceLabel.text);
+				root.Add(text);
+			}
+
+			return root;
+		}
+		
 		public override void OnGUI (Rect position, SerializedProperty property, GUIContent label)
 		{
 			EditorGUI.BeginProperty(position, label, property);
